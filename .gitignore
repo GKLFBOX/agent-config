@@ -1,0 +1,16 @@
+# 認証情報・機微
+.credentials.json
+**/.credentials.json
+settings.local.json
+**/settings.local.json
+
+# 退避・ランタイム
+backups/
+.worktrees/
+.last-cleanup
+.agent-bridge/
+**/.agent-bridge/
+
+# OS
+Thumbs.db
+desktop.ini

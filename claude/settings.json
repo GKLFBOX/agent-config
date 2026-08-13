@@ -1,0 +1,118 @@
+{
+  "permissions": {
+    "additionalDirectories": [
+      "<vault-root>"
+    ]
+  },
+  "model": "opus",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"<node-path>\" \"<user-profile>/.claude/hooks/context-mode-cache-heal.mjs\""
+          },
+          {
+            "type": "command",
+            "command": "\"<node-path>\" \"<user-profile>/.claude/hooks/external-memory-start.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"<user-profile>/.claude/hooks/agent-file-backup/pre-tool-use.ps1\"",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"<user-profile>/.claude/hooks/delete-guard/pre-tool-use.ps1\"",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"<user-profile>/.claude/hooks/markdown-format/pre-tool-use.ps1\"",
+            "timeout": 90
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"<user-profile>/.claude/hooks/markdown-format/post-tool-use.ps1\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"<user-profile>/.claude/hooks/markdown-format/stop.ps1\"",
+            "timeout": 90
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "context-mode@context-mode": true,
+    "andrej-karpathy-skills@karpathy-skills": true,
+    "superpowers@claude-plugins-official": true,
+    "obsidian@obsidian-skills": true,
+    "codex@openai-codex": true,
+    "claude-md-management@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true
+  },
+  "extraKnownMarketplaces": {
+    "obsidian-skills": {
+      "source": {
+        "source": "github",
+        "repo": "kepano/obsidian-skills"
+      }
+    },
+    "context-mode": {
+      "source": {
+        "source": "git",
+        "url": "https://github.com/mksglu/context-mode.git"
+      }
+    },
+    "karpathy-skills": {
+      "source": {
+        "source": "github",
+        "repo": "forrestchang/andrej-karpathy-skills"
+      }
+    },
+    "openai-codex": {
+      "source": {
+        "source": "github",
+        "repo": "openai/codex-plugin-cc"
+      }
+    }
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "\"<node-path>\" \"<user-profile>/.claude/hooks/statusline.js\""
+  },
+  "autoUpdatesChannel": "latest",
+  "theme": "dark",
+  "inputNeededNotifEnabled": true,
+  "agentPushNotifEnabled": true
+}

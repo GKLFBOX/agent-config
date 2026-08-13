@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "task_type", "repository", "objective", "constraints", "acceptance_criteria", "review_scope", "output_path"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "request_id": { "type": "string", "pattern": "^[0-9]{8}T[0-9]{6}Z-[a-f0-9]{6}$" },
+    "task_type": { "enum": ["implementation", "review", "investigation"] },
+    "repository": { "type": "string", "minLength": 1 },
+    "objective": { "type": "string", "minLength": 1 },
+    "constraints": { "type": "array", "items": { "type": "string" } },
+    "acceptance_criteria": { "type": "array", "items": { "type": "string" } },
+    "review_scope": { "type": "array", "items": { "type": "string" } },
+    "output_path": { "type": "string", "minLength": 1 }
+  }
+}

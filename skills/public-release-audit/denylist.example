@@ -1,0 +1,7 @@
+# 個人識別子の禁止語。1行1パターン（git grep の基本正規表現）。
+# コピーして repo ごとの denylist を作り、公開ツリーの外へ置く。
+# 実名・ハンドル・メールアドレスのローカル部
+yourhandle
+your\.name@example\.com
+# 社内ホスト名やサービス名
+internal-host

@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^(apply_patch|Edit|Write)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File \"<repo-root>/claude/hooks/agent-file-backup/pre-tool-use.ps1\" -Agent codex",
+            "commandWindows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"<repo-root>\\claude\\hooks\\agent-file-backup\\pre-tool-use.ps1\" -Agent codex",
+            "timeout": 30,
+            "statusMessage": "Backing up Git-untracked files"
+          }
+        ]
+      }
+    ]
+  }
+}

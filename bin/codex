@@ -1,0 +1,41 @@
+#!/bin/sh
+# <!-- agent-config: generated mirror --> source of truth: agent-config repo bin/codex
+#
+# ASCII only, to match bin/codex.cmd (cmd reads that twin in the OEM code page).
+#
+# codex shim for POSIX shells (Git Bash).
+#
+# %LOCALAPPDATA%\Programs\OpenAI\Codex\bin is a junction created by the
+# standalone installer (openai/codex PR #17022 changed it from a real
+# directory to a junction). Windows refuses to traverse a junction created by
+# a non-admin user from a process that has the Redirection Trust Mitigation
+# enabled, failing with WinError 448 / 0xC00004BE ("untrusted mount point").
+# Claude Code's shell is such a process, so `codex` cannot be resolved through
+# that PATH entry.
+#
+# The codex plugin companion spawns tools through $SHELL (/bin/bash.exe),
+# which does not resolve codex.cmd from a bare `codex`, so this extensionless
+# twin is required alongside codex.cmd.
+#
+# Reading reparse metadata is allowed; only traversal is blocked. Resolving at
+# run time keeps the shim working across codex updates, which repoint
+# `current` to a new release directory.
+
+set -e
+
+query='(Get-Item -LiteralPath (Join-Path $env:USERPROFILE ".codex\packages\standalone\current") -Force).Target'
+target=$(powershell.exe -NoProfile -NonInteractive -Command "$query" 2>/dev/null | tr -d '\r')
+
+if [ -z "$target" ]; then
+  echo "codex shim: cannot resolve junction target of %USERPROFILE%\\.codex\\packages\\standalone\\current" >&2
+  exit 1
+fi
+
+exe="$(cygpath -u "$target")/bin/codex.exe"
+
+if [ ! -x "$exe" ]; then
+  echo "codex shim: codex.exe not found at $exe" >&2
+  exit 1
+fi
+
+exec "$exe" "$@"

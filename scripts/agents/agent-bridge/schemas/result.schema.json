@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "status", "summary", "changed_files", "verification", "findings", "decisions", "risks", "review_focus", "artifacts"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "request_id": { "type": "string" },
+    "status": { "enum": ["completed", "partial", "failed"] },
+    "summary": { "type": "string", "maxLength": 500 },
+    "changed_files": { "type": "array", "items": { "type": "string" } },
+    "verification": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command", "status", "reason", "artifact"],
+        "properties": {
+          "command": { "type": "string" },
+          "status": { "enum": ["passed", "failed", "skipped"] },
+          "reason": { "type": ["string", "null"] },
+          "artifact": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severity", "file", "line", "title", "reason", "suggestion", "confidence"],
+        "properties": {
+          "severity": { "enum": ["critical", "high", "medium", "low"] },
+          "file": { "type": ["string", "null"] },
+          "line": { "type": ["integer", "null"], "minimum": 1 },
+          "title": { "type": "string" },
+          "reason": { "type": "string" },
+          "suggestion": { "type": "string" },
+          "confidence": { "enum": ["high", "medium", "low"] }
+        }
+      }
+    },
+    "decisions": { "type": "array", "maxItems": 10, "items": { "type": "string" } },
+    "risks": { "type": "array", "maxItems": 10, "items": { "type": "string" } },
+    "review_focus": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["file", "line", "reason"],
+        "properties": {
+          "file": { "type": "string" },
+          "line": { "type": ["integer", "null"], "minimum": 1 },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "artifacts": { "type": "array", "items": { "type": "string" } }
+  }
+}

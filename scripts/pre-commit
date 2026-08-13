@@ -1,0 +1,13 @@
+#!/bin/sh
+# agent-config: staged 差分の secret スキャン
+if command -v gitleaks >/dev/null 2>&1; then
+    gitleaks protect --staged --redact --config .gitleaks.toml
+    status=$?
+    if [ "$status" -ne 0 ]; then
+        echo "gitleaks: 秘密情報の可能性を検出しました。コミットを中断します。" >&2
+        exit 1
+    fi
+else
+    echo "warning: gitleaks 未導入のため secret スキャンをスキップしました（推奨: winget install gitleaks）。" >&2
+fi
+exit 0

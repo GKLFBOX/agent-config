@@ -1,0 +1,21 @@
+{
+  "name": "agent-file-backup",
+  "version": "0.2.0",
+  "description": "Back up existing Git-untracked files before Codex edits them.",
+  "author": {
+    "name": "GKLFBOX"
+  },
+  "interface": {
+    "displayName": "Agent File Backup",
+    "shortDescription": "Back up Git-untracked files before edits",
+    "longDescription": "Back up existing Git-untracked files before Codex applies structured file edits, and deny the edit when a required backup cannot be created.",
+    "developerName": "GKLFBOX",
+    "category": "Productivity",
+    "capabilities": [
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Protect Git-untracked files before editing them."
+    ]
+  }
+}

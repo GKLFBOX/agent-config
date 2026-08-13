@@ -1,0 +1,6 @@
+# PrettierはLFを正本とする。core.autocrlf=trueでもcheckout後の検査を安定させる。
+*.md text eol=lf
+
+# POSIX シムは LF 固定。core.autocrlf=true 環境で CRLF 化すると shebang が
+# `#!/bin/sh\r` になり、Git Bash が実行できなくなる。
+bin/codex text eol=lf
