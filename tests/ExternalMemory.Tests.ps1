@@ -9,7 +9,7 @@ BeforeAll {
     )
     $script:MirrorDetectionContract = @(
         '`& ''<repo-root>/scripts/status.ps1'' | Out-String -Width 4096`を実行する。`Out-String -Width 4096`は`Managed`列を表示して判定するための前提条件である。',
-        '`vault-rules-mirror`と`vault-home`で始まる行を1行ずつ特定し、それぞれの`Managed`列が`True`か確認する。',
+        '`vault-rules-mirror`、`vault-home`、`vault-todo`で始まる行を1行ずつ特定し、それぞれの`Managed`列が`True`か確認する。',
         '`Managed=False`は未解決のミラードリフトとして報告する。',
         '対象行の欠落は未解決のミラードリフトとして報告する。',
         '`Managed`列が表示されていない場合は検査未完了として報告する。',
@@ -49,6 +49,25 @@ Describe '正本ルールディレクトリ' {
         $tasks | Should -Not -Match 'Dashboard\.md'
         $tasks | Should -Match 'バックリンクで確認する'
     }
+    It '未完了タスクの横断一覧はルート Todo.md の埋め込み検索で持つ' {
+        $todo       = Get-Content (Join-Path $script:RepoRoot 'vault/Todo.md') -Raw
+        $core       = Get-Content (Join-Path $script:Rules 'core.md') -Raw
+        $tasks      = Get-Content (Join-Path $script:Rules 'tasks.md') -Raw
+        $properties = Get-Content (Join-Path $script:Rules 'properties.md') -Raw
+
+        # Vault側は生成コピー。手編集させないマーカーを持つ。
+        $todo | Should -Match 'generated mirror'
+        $todo | Should -Match '(?m)^```query\r?$'
+        $todo | Should -Match 'path:"Projects/" task-todo:/\./'
+        # 追加記法は導入しない。`#todo` で絞る形へ戻すとこの検査が落ちる。
+        $todo | Should -Not -Match '#todo'
+
+        $core       | Should -Match '`Todo\.md`'
+        $tasks      | Should -Match '`Todo\.md`'
+        $properties | Should -Match 'ルート`Home\.md` / `Todo\.md`'
+        # 一覧を作ってもタスクの正本は各ノートのチェックボックスのまま動かさない。
+        $tasks | Should -Match 'タスクの正本は発生した文脈のノート'
+    }
     It 'Handoff は作業単位で、work property と archive script を使う' {
         $core = Get-Content (Join-Path $script:Rules 'core.md') -Raw
         $handoff = Get-Content (Join-Path $script:Skills 'external-memory-handoff/SKILL.md') -Raw
@@ -70,6 +89,39 @@ Describe '正本ルールディレクトリ' {
         $reference | Should -Match 'repo 名'
         $reference | Should -Match '日本語名'
         $properties | Should -Match 'Handoff\s+\|\s+`Handoffs`\s+\|\s+`active`\s+\|\s+`project`, `work`, `next`'
+    }
+    It 'reference は現行Handoffを読み取りだけで論理消費する' {
+        $core = Get-Content (Join-Path $script:Rules 'core.md') -Raw
+        $reference = Get-Content (Join-Path $script:Skills 'external-memory-reference/SKILL.md') -Raw
+        $handoff = Get-Content (Join-Path $script:Skills 'external-memory-handoff/SKILL.md') -Raw
+
+        $core | Should -Match '現行Handoff'
+        $core | Should -Match '論理的に消費'
+        $reference | Should -Match 'Vaultは変更しない'
+        $reference | Should -Match '論理的な消費'
+        $reference | Should -Match '更新・退避を行わない'
+        foreach ($text in @($core, $reference, $handoff)) {
+            $text | Should -Not -Match '未消費'
+        }
+    }
+    It 'handoff は継続時に旧ノートを退避して新規作成する' {
+        $handoff = Get-Content (Join-Path $script:Skills 'external-memory-handoff/SKILL.md') -Raw
+
+        $handoff | Should -Match '(?s)継続する場合.+Todo.+リンクを外す.+scripts/archive-handoff\.ps1.+新しいHandoff.+新規作成.+リンクを戻す'
+        $handoff | Should -Match '(?s)既存Handoffがあれば.+リンクを外す.+そのHandoffを.+scripts/archive-handoff\.ps1.+退避'
+        $handoff | Should -Match '既存Handoffを直接更新しない'
+    }
+    It 'handoff は完了時に旧ノートを退避して新規作成しない' {
+        $handoff = Get-Content (Join-Path $script:Skills 'external-memory-handoff/SKILL.md') -Raw
+
+        $handoff | Should -Match '(?s)完了する場合.+Todo項目.+削除.+scripts/archive-handoff\.ps1.+新しいHandoffは作成しない'
+    }
+    It 'Properties はHandoffの消費状態を保存しない' {
+        $properties = Get-Content (Join-Path $script:Rules 'properties.md') -Raw
+
+        $properties | Should -Match '消費状態をPropertiesへ保存しない'
+        $properties | Should -Match '`updated`.+参照日ではない'
+        $properties | Should -Not -Match '(?m)^consumed:'
     }
     It 'Project命名ルールとmaintenance検出条件が repo property を基準にする' {
         $core = Get-Content (Join-Path $script:Rules 'core.md') -Raw
@@ -113,7 +165,7 @@ Describe '正本ルールディレクトリ' {
 ## 検出
 
 1. `& '<repo-root>/scripts/status.ps1' | Out-String -Width 4096`を実行するが、`Managed`列は確認しない。
-2. `vault-rules-mirror`と`vault-home`の対象行は探すが、`Managed=False`でもドリフトは報告しない。
+2. `vault-rules-mirror`、`vault-home`、`vault-todo`の対象行は探すが、`Managed=False`でもドリフトは報告しない。
 3. 対象行の欠落や`status.ps1`の不在、実行失敗は検査未完了とは扱わない。
 4. `sync-vault-mirror.ps1`を自動実行しないとは限らない。
 
@@ -163,7 +215,8 @@ Describe '正本ルールディレクトリ' {
         $tasks = Get-Content (Join-Path $script:Rules 'tasks.md') -Raw
 
         $tasks | Should -Match '動詞で終わる行動'
-        $tasks | Should -Match 'チェックボックスの横断集約はしない'
+        # 横断表示は Todo.md が担うが、タスク行の複製は禁じたまま。
+        $tasks | Should -Match 'タスク行を別ノートへ複製しない'
     }
     It 'Knowledge と Decision がProjectノートへ逆リンクする' {
         $core = Get-Content (Join-Path $script:Rules 'core.md') -Raw

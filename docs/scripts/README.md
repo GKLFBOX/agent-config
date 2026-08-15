@@ -9,6 +9,7 @@
 ## 構成
 
 - `scripts/lib/AgentConfig.psm1` - 配置ターゲット、link/copy 判定、backup、Vault mirror 同期関数。
+- `scripts/lib/ClaudexAuth.psm1` - CLIProxyAPI と Codex CLI の認証状態を認証ファイルから判定する関数群。
 - `scripts/install.ps1` - 全ターゲットを配置する installer。
 - `scripts/uninstall.ps1` - 管理下 link / copy / copy-file を外す uninstaller。
 - `scripts/status.ps1` - 配置先の存在、method、managed 状態を表で表示する。
@@ -17,6 +18,7 @@
 - `scripts/pre-commit` - staged 差分を `gitleaks protect` で secret scan する hook。
 - `scripts/agents/` - AgentBridge runner 群。詳細は [agent-bridge](../agent-bridge/README.md) を参照。
 - `scripts/claudex/` - CLIProxyAPI経由でClaude Codeを起動する関数と導入、ロールバック用スクリプト。
+- `scripts/claudex/relogin.ps1` - CLIProxyAPI と Codex CLI の Codex OAuth を再ログインする復旧口。
 
 ## 使い方・挙動
 
@@ -36,6 +38,7 @@
   - `skills/external-memory-rules` -> `<vault-root>\System\external-memory-rules`
 - CopyFile 方式:
   - `vault/Home.md` -> `<vault-root>\Home.md`
+  - `vault/Todo.md` -> `<vault-root>\Todo.md`
   - `bin/codex.cmd` -> `~/.local/bin/codex.cmd`
   - `bin/codex` -> `~/.local/bin/codex`
   - codex シムは symlink で配れない。PATH 上の reparse point が走査できない問題を回避するのが目的で、
@@ -46,6 +49,9 @@
 - `scripts/sync-vault-mirror.ps1` は `Method` が `Copy` または `CopyFile` のターゲットだけを処理する。配置先は Vault 限定ではなく `~/.local/bin` の codex シムも含む。`install.ps1` と同じ退避ガード（`Backup-UnmanagedCopyTarget`）を通し、管理外の実体は上書きせず `backups/<yyyyMMdd-HHmmss>/` へ退避する。
 - `scripts/check-external-user-skills.ps1` は `~/.agents/skills` と `~/.agents/.skill-lock.json` を照合する。
 - `scripts/pre-commit` は `gitleaks` があれば実行し、無ければ warning を出して skip する。
+- `scripts/lib/ClaudexAuth.psm1` は access token の `iat` と `exp` から `Healthy` / `Ending` / `Expired` / `Unknown` を返す。上流へはリクエストを送らない。access token はセッションの終了時刻を超えて発行されないため、寿命が満額（10日）に満たなければ `exp` が再ログイン期限を指す。
+- `claudex` は起動前にこの判定を通す。CLIProxyAPI が `Expired` なら Claude Code を起動せず `scripts/claudex/relogin.ps1` を案内する。Codex CLI の失効は起動を止めず、委託と statusline の使用率表示への影響を警告する。
+- `scripts/claudex/relogin.ps1` は `-ProxyOnly` と `-CodexOnly` で片方だけ実行できる。常駐する CLIProxyAPI は停止しない。
 
 ## 依存・前提
 
@@ -63,7 +69,7 @@
 
 ## tests
 
-- `tests/AgentConfig.Tests.ps1` - 14ターゲット、Vault mirror の `Copy`、Home ノートと codex シムの `CopyFile`、管理外配置先の退避ガード、link/copy/remove 安全性を検証する。
+- `tests/AgentConfig.Tests.ps1` - 16ターゲット、Vault mirror の `Copy`、Home / Todo ノートと codex シムの `CopyFile`、管理外配置先の退避ガード、link/copy/remove 安全性を検証する。
 - `tests/ExternalMemory.Tests.ps1` - `skills/external-memory-rules` と external-memoryスキル群の存在・参照関係・旧Vaultパス不使用を検証する。
 - `tests/AgentBridge.Tests.ps1` - task/result schema、path 検証、request/result 読み書き、CLI wrapper、期限切れ request のごみ箱移動契約を検証する。
 - `tests/AgentFileBackup.Tests.ps1` - agent-file-backup hook の登録、対象 path 抽出、未追跡ファイル backup、世代保持、UTF-8 payload、deny 応答を検証する。

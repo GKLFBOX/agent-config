@@ -13,6 +13,8 @@ function Get-AgentConfigTargets {
         [pscustomobject]@{ Name='vault-rules-mirror';  SourcePath=(Join-Path $RepoRoot 'skills/external-memory-rules'); DestinationPath=(Join-Path $VaultRoot 'System/external-memory-rules'); LinkType=$null; Method='Copy' },
         # HomeノートはVault直下の単一ファイル。ルールと同じく正本はリポジトリ、Vault側は生成コピー（手編集禁止）。
         [pscustomobject]@{ Name='vault-home';          SourcePath=(Join-Path $RepoRoot 'vault/Home.md'); DestinationPath=(Join-Path $VaultRoot 'Home.md'); LinkType=$null; Method='CopyFile' },
+        # Todoノートは組み込み検索の埋め込みだけを持つ。Project横断の未完了タスクはここで見る。
+        [pscustomobject]@{ Name='vault-todo';          SourcePath=(Join-Path $RepoRoot 'vault/Todo.md'); DestinationPath=(Join-Path $VaultRoot 'Todo.md'); LinkType=$null; Method='CopyFile' },
         # Codex は「Claude の1レイヤー下の司令塔」。正本 AGENTS.md と skills を共有する。
         # skills の配置先は公式 USER スコープ ~/.agents/skills。skills CLI 管理の実体 dir のため
         # 直下置換ではなく agent-config サブディレクトリへのネスト1リンクで共存させる。

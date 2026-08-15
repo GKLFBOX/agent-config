@@ -2,7 +2,7 @@
 type: system
 status: active
 created: 2026-06-30
-updated: 2026-07-29
+updated: 2026-08-15
 ---
 
 # 外部記憶ルール — Core
@@ -21,7 +21,7 @@ updated: 2026-07-29
 - `Daily` 日次ノート
 - `Knowledge` 再利用可能な知識
 - `Decisions` 重要な判断と理由
-- `Handoffs` セッション間の引き継ぎ資料（未消費を作業単位で保持し、`project` で束ねる）
+- `Handoffs` セッション間の引き継ぎ資料（現行Handoffを作業単位で保持し、`project` で束ねる）
 - `Projects` 個人開発・生活上のプロジェクト
 - `System` 本ルール群
 
@@ -33,9 +33,16 @@ updated: 2026-07-29
 - 重要な判断と理由の正本: Decisionノート
 - Knowledge / Decision は本文の `## 関連` に、関係するProjectノートへの `[[wikilink]]` を必ず置く。複数のProjectに関わる場合は複数書く。ProjectとKnowledge / Decisionの関連は、この逆向きのリンクとバックリンクだけで辿る。
 - Handoff は本文の `## 関連リンク` に、対象Projectノートへの `[[wikilink]]` を必ず置く。Project から Handoff へのリンクは Todo項目内の外向きリンクだけなので、`tasks.md` のバックリンクによる一覧はこの逆リンクで成立する。
-- 引き継ぎの正本: `Handoffs` の当該作業ノート（同一Projectに複数存在してよい。消費後は `scripts/archive-external-memory.ps1 -Category Handoffs` で Vault外 `<archive-root>\Handoffs` へ移動）
+- 引き継ぎの正本: `Handoffs` の現行Handoff（同一Projectに複数存在してよい）
 - 一時的な情報: Inbox または Daily
-- 一覧用のBaseファイルは持たない。分類別の一覧はフォルダとバックリンクで代替する（`tasks.md`）。
+- 一覧用のBaseファイルは持たない。分類別の一覧はフォルダとバックリンク、未完了タスクの横断はルート`Todo.md`の埋め込み検索で代替する（`tasks.md`）。
+
+## Handoffライフサイクル
+
+- `Handoffs` 内の `status: active` な作業ノートを現行Handoffと呼ぶ。消費状態はPropertiesへ保存しない。
+- `external-memory-reference` が現行Handoffを読むことで論理的に消費する。読み込みではHandoffを更新・退避しない。
+- 作業を継続する場合は、ProjectノートのTodoから既存Handoffへのリンクを外し、既存HandoffをVault外へ退避してから新しいHandoffを作り、Todoへリンクを戻す。既存Handoffを直接更新しない。
+- 作業を完了する場合は、ProjectノートのTodo項目を削除し、既存HandoffをVault外へ退避する。新しいHandoffは作成しない。
 
 ## ノート形式の正本
 

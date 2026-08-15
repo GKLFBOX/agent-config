@@ -34,13 +34,20 @@ Describe 'Get-AgentConfigTargets' {
         $m.Method     | Should -Be 'CopyFile'
         $m.DestinationPath | Should -Match 'Home\.md$'
     }
+    It 'Todoノートは単一ファイルのコピーミラー（CopyFile）' {
+        $m = (Get-AgentConfigTargets -RepoRoot $RepoRoot) | Where-Object Name -eq 'vault-todo'
+        $m | Should -Not -BeNullOrEmpty
+        $m.SourcePath | Should -Be (Join-Path $RepoRoot 'vault/Todo.md')
+        $m.Method     | Should -Be 'CopyFile'
+        $m.DestinationPath | Should -Match 'Todo\.md$'
+    }
     It 'symlink系ターゲットの Method は SymbolicLink' {
         ($targets = Get-AgentConfigTargets -RepoRoot $RepoRoot) | Out-Null
         ($targets | Where-Object Name -eq 'claude-skills').Method | Should -Be 'SymbolicLink'
     }
-    It '全15ターゲットを返す' {
+    It '全16ターゲットを返す' {
         $t = Get-AgentConfigTargets -RepoRoot $RepoRoot
-        $t.Count | Should -Be 15
+        $t.Count | Should -Be 16
     }
     It 'AgentBridge は scripts/agents を ~/.agent-bridge へ symlink で配る' {
         $m = (Get-AgentConfigTargets -RepoRoot $RepoRoot) | Where-Object Name -eq 'agent-bridge'

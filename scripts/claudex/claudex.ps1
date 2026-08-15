@@ -1,3 +1,5 @@
+Import-Module (Join-Path $PSScriptRoot '..\lib\ClaudexAuth.psm1') -Force -DisableNameChecking
+
 $script:ClaudexModelMap = @{
     'sol'           = 'gpt-5.6-sol'
     'terra'         = 'gpt-5.6-terra'
@@ -123,6 +125,38 @@ $script:ClaudexBaseUrl = 'http://127.0.0.1:8317'
 $script:ClaudexTaskName = 'AgentConfig-CLIProxyAPI'
 $script:ClaudexSecretPath = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'agent-config\claudex\secrets.psd1'
 $script:ClaudexCapabilities = 'effort,xhigh_effort,max_effort'
+$script:ClaudexReloginScript = Join-Path $PSScriptRoot 'relogin.ps1'
+
+function Format-ClaudexAuthDeadline {
+    param(
+        [Parameter(Mandatory)][datetime]$Deadline,
+        [datetime]$Now = [datetime]::UtcNow
+    )
+
+    $days = [math]::Floor(($Deadline - $Now).TotalDays)
+    $local = $Deadline.ToLocalTime().ToString('yyyy-MM-dd HH:mm')
+    return "あと${days}日で失効する（期限: $local）"
+}
+
+function Assert-ClaudexAuth {
+    param(
+        [Parameter(Mandatory)]$Status,
+        [datetime]$Now = [datetime]::UtcNow,
+        [string]$ReloginScript = $script:ClaudexReloginScript
+    )
+
+    $recover = "復旧: pwsh -NoProfile -File `"$ReloginScript`""
+    switch ($Status.Proxy.State) {
+        'Expired' { throw "Codex認証が失効している。再ログインするまでCLIProxyAPIはGPTモデルへ応答できない。$recover" }
+        'Ending' { Write-Warning "Codex認証は$(Format-ClaudexAuthDeadline -Deadline $Status.Proxy.Deadline -Now $Now)。$recover" }
+        'Unknown' { Write-Warning "Codex認証の状態を判定できない。$recover" }
+    }
+    # Codex CLI の失効は claudex 自体を止めない。影響は委託とstatuslineの使用率表示に限られる。
+    switch ($Status.CodexCli.State) {
+        'Expired' { Write-Warning "Codex CLIの認証が失効している。codexへの委託とstatuslineの使用率表示が使えない。$recover" }
+        'Ending' { Write-Warning "Codex CLIの認証は$(Format-ClaudexAuthDeadline -Deadline $Status.CodexCli.Deadline -Now $Now)。$recover" }
+    }
+}
 
 function Get-ClaudexToken {
     param([Parameter(Mandatory)][string]$Path)
@@ -270,6 +304,7 @@ function Invoke-Claudex {
         [AllowEmptyCollection()][object[]]$Arguments = @(),
         [string]$SecretPath = $script:ClaudexSecretPath,
         [scriptblock]$TokenReader = { param($Path) Get-ClaudexToken -Path $Path },
+        [scriptblock]$AuthStatusReader = { Get-ClaudexAuthStatus },
         [scriptblock]$WebRequest = {
             param($Uri, $Headers)
             Invoke-WebRequest -Uri $Uri -Headers $Headers -Method Get -TimeoutSec 2 -ErrorAction Stop
@@ -303,6 +338,7 @@ function Invoke-Claudex {
     }
 
     $token = & $TokenReader $SecretPath
+    Assert-ClaudexAuth -Status (& $AuthStatusReader)
     Confirm-ClaudexProxy -Token $token -WebRequest $WebRequest -TaskStarter $TaskStarter -Delay $Delay
     $state = [pscustomobject]@{ ExitCode = 0 }
     Invoke-WithClaudexEnvironment -Token $token -Action {

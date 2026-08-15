@@ -9,6 +9,7 @@
 ## 構成
 
 - `vault/Home.md` - Vault 直下へ配布する Home ノート（クイックヘルプ＋仕様概要）の正本。
+- `vault/Todo.md` - Vault 直下へ配布する Todo ノート（Project 横断の未完了タスクを組み込み検索で表示）の正本。
 - `skills/external-memory-rules/` - Vault 運用規約の正本。
 - `scripts/sync-vault-mirror.ps1` - copy / copy-file mirror を再同期する script。
 - `scripts/lib/AgentConfig.psm1` - Vault mirror の配置ターゲットと copy 実装。
@@ -16,6 +17,7 @@
 ## 使い方・挙動
 
 - `vault/Home.md` は `<vault-root>\Home.md` へ CopyFile 配布される。
+- `vault/Todo.md` は `<vault-root>\Todo.md` へ CopyFile 配布される。中身は `path:"Projects/" task-todo:/./` の `query` 埋め込みだけで、タスクの正本は各 Project ノートのチェックボックスのまま。
 - `skills/external-memory-rules/` は `<vault-root>\System\external-memory-rules` へ Copy 配布される。
 - copy mirror は Google Drive sync と両立させるため symlink / junction を使わない。
 - `scripts/sync-vault-mirror.ps1` は `Method` が `Copy` / `CopyFile` のターゲットだけを同期する。対象は Vault 限定ではなく、`~/.local/bin` の codex シムも同じ経路で配る（`docs/scripts/README.md`）。

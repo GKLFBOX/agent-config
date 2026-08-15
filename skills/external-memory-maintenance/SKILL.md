@@ -17,7 +17,7 @@ description: 外部記憶Vaultのリンク切れ・属性不整合・フォル�
 6. Knowledge / Decision のうち、関係するProjectノートへの `[[wikilink]]` を持たないノートを洗い出す。
 7. 旧パスなどの古い記述を探す場合、計画・履歴文書は検出対象外にし、現行運用文書だけを候補にする。
 8. `& '<repo-root>/scripts/status.ps1' | Out-String -Width 4096`を実行する。`Out-String -Width 4096`は`Managed`列を表示して判定するための前提条件である。
-9. `vault-rules-mirror`と`vault-home`で始まる行を1行ずつ特定し、それぞれの`Managed`列が`True`か確認する。
+9. `vault-rules-mirror`、`vault-home`、`vault-todo`で始まる行を1行ずつ特定し、それぞれの`Managed`列が`True`か確認する。
 10. `Managed=False`は未解決のミラードリフトとして報告する。
 11. 対象行の欠落は未解決のミラードリフトとして報告する。
 12. `Managed`列が表示されていない場合は検査未完了として報告する。

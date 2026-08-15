@@ -228,11 +228,23 @@ if ($timeoutFailure -notmatch 'did not become ready') { throw "unexpected proxy 
 if ($timeoutFailure -notmatch '\.Actions') { throw 'proxy timeout must point to scheduled-task action inspection' }
 Assert-Equal 21 $script:timeoutRequestCount 'proxy timeout request count'
 
+function New-TestAuthStatus {
+    param([string]$ProxyState = 'Healthy', [string]$CodexState = 'Healthy', [AllowNull()][object]$Deadline = $null)
+    return [pscustomobject]@{
+        Proxy    = [pscustomobject]@{ Source = 'CLIProxyAPI'; State = $ProxyState; Deadline = $Deadline }
+        CodexCli = [pscustomobject]@{ Source = 'CodexCLI'; State = $CodexState; Deadline = $Deadline }
+    }
+}
+
+# AuthStatusReaderを省いた呼び出しはテスト用の失効状態へ落とす
+function Get-ClaudexAuthStatus { New-TestAuthStatus -ProxyState 'Expired' }
+
 $capturedArguments = $null
 $insideToken = $null
 $state = [pscustomobject]@{ ExitCode = 0 }
 Invoke-Claudex -Arguments @('--model', 'terra', '--print', 'ok') `
     -TokenReader { param($Path) 'local-token' } `
+    -AuthStatusReader { New-TestAuthStatus } `
     -WebRequest { param($Uri, $Headers) [pscustomobject]@{ StatusCode = 200 } } `
     -CommandResolver { param($Name) [pscustomobject]@{ Source = 'fake-claude.exe' } } `
     -ClaudeInvoker {
@@ -248,6 +260,7 @@ Assert-Equal 7 $global:LASTEXITCODE 'launcher exit code'
 $script:capturedCommand = $null
 Invoke-Claudex -Arguments @('--print', 'ok') `
     -TokenReader { param($Path) 'local-token' } `
+    -AuthStatusReader { New-TestAuthStatus } `
     -WebRequest { param($Uri, $Headers) [pscustomobject]@{ StatusCode = 200 } } `
     -CommandResolver {
         param($Name)
@@ -288,6 +301,92 @@ catch {
     $secretFailure = "$_"
 }
 if ($secretFailure -match 'do-not-print-this') { throw 'error message leaked token' }
+
+$authNow = [datetime]::new(2026, 8, 15, 0, 0, 0, [DateTimeKind]::Utc)
+
+# Healthy なら何も出さない
+$healthyWarnings = Assert-ClaudexAuth -Status (New-TestAuthStatus) -Now $authNow -ReloginScript 'X:\relogin.ps1' 3>&1
+Assert-Equal 0 @($healthyWarnings).Count 'healthy auth warnings'
+
+# CLIProxyAPI の Expired は停止させ、復旧口を示す
+Assert-Throws {
+    Assert-ClaudexAuth -Status (New-TestAuthStatus -ProxyState 'Expired') -Now $authNow -ReloginScript 'X:\relogin.ps1'
+} 'X:\\relogin\.ps1' 'expired proxy auth points to relogin script'
+$quotedPathFailure = $null
+try {
+    Assert-ClaudexAuth -Status (New-TestAuthStatus -ProxyState 'Expired') -Now $authNow -ReloginScript 'X:\path with space\relogin.ps1'
+}
+catch { $quotedPathFailure = "$_" }
+if ($quotedPathFailure -notmatch '-File "X:\\path with space\\relogin\.ps1"') { throw "relogin path must be quoted: $quotedPathFailure" }
+
+# Ending は警告して通す。残り日数と期限を出す
+$endingWarnings = @(Assert-ClaudexAuth -Status (New-TestAuthStatus -ProxyState 'Ending' -Deadline $authNow.AddDays(6)) -Now $authNow -ReloginScript 'X:\relogin.ps1' 3>&1)
+Assert-Equal 1 $endingWarnings.Count 'ending auth warning count'
+$endingText = "$($endingWarnings[0])"
+if (-not $endingText.Contains('Codex認証はあと6日で失効する（期限: ')) { throw "unexpected proxy ending warning: $endingText" }
+$codexEndingWarnings = @(Assert-ClaudexAuth -Status (New-TestAuthStatus -CodexState 'Ending' -Deadline $authNow.AddDays(6)) -Now $authNow -ReloginScript 'X:\relogin.ps1' 3>&1)
+Assert-Equal 1 $codexEndingWarnings.Count 'codex ending warning count'
+$codexEndingText = "$($codexEndingWarnings[0])"
+if (-not $codexEndingText.Contains('Codex CLIの認証はあと6日で失効する（期限: ')) { throw "unexpected Codex CLI ending warning: $codexEndingText" }
+
+# Unknown は警告して通す
+$unknownWarnings = @(Assert-ClaudexAuth -Status (New-TestAuthStatus -ProxyState 'Unknown') -Now $authNow -ReloginScript 'X:\relogin.ps1' 3>&1)
+Assert-Equal 1 $unknownWarnings.Count 'unknown auth warning count'
+
+# Codex CLI 単独の失効は警告だけで、影響範囲を書く
+$codexWarnings = @(Assert-ClaudexAuth -Status (New-TestAuthStatus -CodexState 'Expired') -Now $authNow -ReloginScript 'X:\relogin.ps1' 3>&1)
+Assert-Equal 1 $codexWarnings.Count 'codex cli warning count'
+if ("$($codexWarnings[0])" -notmatch 'statusline') { throw "codex warning must state the impact: $($codexWarnings[0])" }
+
+# Codex CLI の Unknown は黙って通す
+Assert-Equal 0 @(Assert-ClaudexAuth -Status (New-TestAuthStatus -CodexState 'Unknown') -Now $authNow -ReloginScript 'X:\relogin.ps1' 3>&1).Count 'codex cli unknown is silent'
+
+# 失効時は Claude Code を起動しない
+$script:gateInvocations = 0
+Assert-Throws {
+    Invoke-Claudex -Arguments @('--print', 'ok') `
+        -TokenReader { param($Path) 'local-token' } `
+        -AuthStatusReader { New-TestAuthStatus -ProxyState 'Expired' } `
+        -WebRequest { param($Uri, $Headers) [pscustomobject]@{ StatusCode = 200 } } `
+        -CommandResolver { param($Name) [pscustomobject]@{ Source = 'fake-claude.exe' } } `
+        -ClaudeInvoker { param($Command, $Arguments, $State) $script:gateInvocations++ }
+} 'Codex認証' 'expired auth must stop launch'
+Assert-Equal 0 $script:gateInvocations 'expired auth must not launch claude'
+
+# Ending なら起動する
+$script:gateInvocations = 0
+Invoke-Claudex -Arguments @('--print', 'ok') `
+    -TokenReader { param($Path) 'local-token' } `
+    -AuthStatusReader { New-TestAuthStatus -ProxyState 'Ending' -Deadline $authNow.AddDays(3) } `
+    -WebRequest { param($Uri, $Headers) [pscustomobject]@{ StatusCode = 200 } } `
+    -CommandResolver { param($Name) [pscustomobject]@{ Source = 'fake-claude.exe' } } `
+    -ClaudeInvoker { param($Command, $Arguments, $State) $script:gateInvocations++; $State.ExitCode = 0 } 3>&1 | Out-Null
+Assert-Equal 1 $script:gateInvocations 'ending auth must launch claude'
+
+# --version は判定を通らない
+$script:gateReads = 0
+Invoke-Claudex -Arguments @('--version') `
+    -AuthStatusReader { $script:gateReads++; New-TestAuthStatus } `
+    -CommandResolver { param($Name) [pscustomobject]@{ Source = 'fake-claude.exe' } } `
+    -ClaudeInvoker { param($Command, $Arguments, $State) $State.ExitCode = 0 }
+Assert-Equal 0 $script:gateReads 'version must not read auth status'
+
+# --help も判定を通らない
+$script:gateReads = 0
+Invoke-Claudex -Arguments @('--help') -AuthStatusReader { $script:gateReads++; New-TestAuthStatus } | Out-Null
+Assert-Equal 0 $script:gateReads 'help must not read auth status'
+
+# メッセージに資格情報を含めない
+$gateFailure = $null
+try {
+    Invoke-Claudex -Arguments @('--print', 'ok') `
+        -TokenReader { param($Path) 'do-not-print-this' } `
+        -AuthStatusReader { New-TestAuthStatus -ProxyState 'Expired' } `
+        -CommandResolver { param($Name) [pscustomobject]@{ Source = 'fake-claude.exe' } } `
+        -ClaudeInvoker { param($Command, $Arguments, $State) }
+}
+catch { $gateFailure = "$_" }
+if ($gateFailure -match 'do-not-print-this') { throw 'auth gate leaked token' }
 
 Write-Host 'Claudex runtime tests PASSED'
 
@@ -413,7 +512,7 @@ foreach ($requiredText in @(
 
 $ScriptsReadmePath = Join-Path $RepoRoot 'docs\scripts\README.md'
 $scriptsReadme = Get-Content -Raw -LiteralPath $ScriptsReadmePath
-foreach ($requiredText in @('scripts/claudex/', 'tests/Claudex.Tests.ps1')) {
+foreach ($requiredText in @('scripts/claudex/', 'tests/Claudex.Tests.ps1', 'scripts/claudex/relogin.ps1', 'scripts/lib/ClaudexAuth.psm1')) {
     if ($scriptsReadme -notmatch [regex]::Escape($requiredText)) {
         throw "Scripts README must contain [$requiredText]"
     }
@@ -423,5 +522,108 @@ $sourceText = Get-Content -Raw -LiteralPath $ClaudexScript
 foreach ($forbidden in @('dangerously-skip-permissions', 'CLAUDE_CONFIG_DIR', 'settings.json')) {
     if ($sourceText -match [regex]::Escape($forbidden)) { throw "claudex source must not contain [$forbidden]" }
 }
+
+$ReloginScript = Join-Path $RepoRoot 'scripts\claudex\relogin.ps1'
+. $ReloginScript
+
+$script:proxyLogins = 0
+$script:codexLogins = 0
+$script:capturedExecutable = $null
+
+$reloginStatus = [pscustomobject]@{
+    Proxy    = [pscustomobject]@{ Source = 'CLIProxyAPI'; State = 'Expired'; Deadline = $null }
+    CodexCli = [pscustomobject]@{ Source = 'CodexCLI'; State = 'Expired'; Deadline = $null }
+}
+
+# エントリポイントのOut-Nullを通しても状態を表示する
+$entrypointReport = @(& {
+    Invoke-ClaudexRelogin -ProxyOnly `
+        -StatusReader { $reloginStatus } `
+        -PathResolver { [pscustomobject]@{ Executable = 'proxy.exe'; Config = 'config.yaml' } } `
+        -ProxyLogin { param($Executable, $Config) } | Out-Null
+} 6>&1)
+if (($entrypointReport -join "`n") -notmatch 'CLIProxyAPI') { throw 'relogin entrypoint must show proxy status' }
+if (($entrypointReport -join "`n") -notmatch 'CodexCLI') { throw 'relogin entrypoint must show Codex CLI status' }
+
+Invoke-ClaudexRelogin `
+    -StatusReader { $reloginStatus } `
+    -PathResolver { [pscustomobject]@{ Executable = 'proxy.exe'; Config = 'config.yaml' } } `
+    -ProxyLogin { param($Executable, $Config) $script:proxyLogins++; $script:capturedExecutable = $Executable } `
+    -CodexLogin { $script:codexLogins++ } | Out-Null
+Assert-Equal 1 $script:proxyLogins 'relogin proxy login count'
+Assert-Equal 1 $script:codexLogins 'relogin codex login count'
+Assert-Equal 'proxy.exe' $script:capturedExecutable 'relogin proxy executable'
+
+# -ProxyOnly は Codex CLI を触らない
+$script:proxyLogins = 0
+$script:codexLogins = 0
+Invoke-ClaudexRelogin -ProxyOnly `
+    -StatusReader { $reloginStatus } `
+    -PathResolver { [pscustomobject]@{ Executable = 'proxy.exe'; Config = 'config.yaml' } } `
+    -ProxyLogin { param($Executable, $Config) $script:proxyLogins++ } `
+    -CodexLogin { $script:codexLogins++ } | Out-Null
+Assert-Equal 1 $script:proxyLogins 'proxy only proxy login count'
+Assert-Equal 0 $script:codexLogins 'proxy only codex login count'
+
+# -CodexOnly は CLIProxyAPI を触らない
+$script:proxyLogins = 0
+$script:codexLogins = 0
+Invoke-ClaudexRelogin -CodexOnly `
+    -StatusReader { $reloginStatus } `
+    -PathResolver { throw 'must not resolve paths' } `
+    -ProxyLogin { param($Executable, $Config) $script:proxyLogins++ } `
+    -CodexLogin { $script:codexLogins++ } | Out-Null
+Assert-Equal 0 $script:proxyLogins 'codex only proxy login count'
+Assert-Equal 1 $script:codexLogins 'codex only codex login count'
+
+# -CodexOnly は判定不能でも再ログインする
+$script:codexLogins = 0
+$unknownCodexStatus = [pscustomobject]@{
+    Proxy    = [pscustomobject]@{ Source = 'CLIProxyAPI'; State = 'Healthy'; Deadline = $null }
+    CodexCli = [pscustomobject]@{ Source = 'CodexCLI'; State = 'Unknown'; Deadline = $null }
+}
+Invoke-ClaudexRelogin -CodexOnly `
+    -StatusReader { $unknownCodexStatus } `
+    -PathResolver { throw 'must not resolve paths' } `
+    -CodexLogin { $script:codexLogins++ } | Out-Null
+Assert-Equal 1 $script:codexLogins 'codex only unknown login count'
+
+# Codex CLI が健全なら再ログインしない
+$script:codexLogins = 0
+$healthyCodexStatus = [pscustomobject]@{
+    Proxy    = [pscustomobject]@{ Source = 'CLIProxyAPI'; State = 'Expired'; Deadline = $null }
+    CodexCli = [pscustomobject]@{ Source = 'CodexCLI'; State = 'Healthy'; Deadline = $null }
+}
+Invoke-ClaudexRelogin `
+    -StatusReader { $healthyCodexStatus } `
+    -PathResolver { [pscustomobject]@{ Executable = 'proxy.exe'; Config = 'config.yaml' } } `
+    -ProxyLogin { param($Executable, $Config) } `
+    -CodexLogin { $script:codexLogins++ } | Out-Null
+Assert-Equal 0 $script:codexLogins 'healthy codex must not relogin'
+
+# ネイティブCLIの非0終了を失敗として扱う
+Assert-Throws {
+    Invoke-ClaudexRelogin -ProxyOnly `
+        -StatusReader { $reloginStatus } `
+        -PathResolver { [pscustomobject]@{ Executable = 'proxy.exe'; Config = 'config.yaml' } } `
+        -ProxyLogin { param($Executable, $Config) $global:LASTEXITCODE = 7 }
+} 'CLIProxyAPI.*7' 'proxy login exit code'
+Assert-Throws {
+    Invoke-ClaudexRelogin -CodexOnly `
+        -StatusReader { $reloginStatus } `
+        -CodexLogin { $global:LASTEXITCODE = 9 }
+} 'Codex CLI.*9' 'codex login exit code'
+
+# 両方の指定は拒否する
+Assert-Throws {
+    Invoke-ClaudexRelogin -ProxyOnly -CodexOnly -StatusReader { $reloginStatus }
+} '同時に指定できない' 'conflicting switches'
+
+# パスを解決できなければ install を案内する
+Assert-Throws {
+    Invoke-ClaudexRelogin -StatusReader { $reloginStatus } -PathResolver { $null }
+} 'install\.ps1' 'unresolved proxy paths'
+
+Write-Host 'Claudex relogin tests PASSED'
 
 Write-Host 'Claudex documentation contract PASSED'

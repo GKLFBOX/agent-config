@@ -1,5 +1,6 @@
 {
   "permissions": {
+    "defaultMode": "auto",
     "additionalDirectories": [
       "<vault-root>"
     ]
@@ -72,6 +73,10 @@
       }
     ]
   },
+  "statusLine": {
+    "type": "command",
+    "command": "\"<node-path>\" \"<user-profile>/.claude/hooks/statusline.js\""
+  },
   "enabledPlugins": {
     "context-mode@context-mode": true,
     "andrej-karpathy-skills@karpathy-skills": true,
@@ -106,10 +111,6 @@
         "repo": "openai/codex-plugin-cc"
       }
     }
-  },
-  "statusLine": {
-    "type": "command",
-    "command": "\"<node-path>\" \"<user-profile>/.claude/hooks/statusline.js\""
   },
   "autoUpdatesChannel": "latest",
   "theme": "dark",
